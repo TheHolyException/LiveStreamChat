@@ -2,6 +2,7 @@ package de.theholyexception.livestreamirc.ircprovider;
 
 import de.theholyexception.livestreamirc.LiveStreamIRC;
 import de.theholyexception.livestreamirc.util.Message;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.java_websocket.client.WebSocketClient;
 import org.java_websocket.handshake.ServerHandshake;
@@ -17,6 +18,8 @@ public class TwitchImpl implements IRC {
     private final Pattern channelPattern = Pattern.compile("PRIVMSG #(\\w+) :(.*)");
     private final Pattern isMessagePattern = Pattern.compile("PRIVMSG #");
     private WebSocketClient client;
+    @Getter
+    private boolean connected = false;
 
 
     public TwitchImpl() {
@@ -34,8 +37,8 @@ public class TwitchImpl implements IRC {
             public void onOpen(ServerHandshake serverHandshake) {
                 log.info("Connected to TwitchIRC");
                 client.send("PASS " + LiveStreamIRC.getProperties().getValue("TwitchToken"));
-                client.send("JOIN #kaigermany_");
                 client.send("NICK rbu_irc");
+                connected = true;
             }
 
             @Override
@@ -64,6 +67,8 @@ public class TwitchImpl implements IRC {
             @Override
             public void onClose(int i, String s, boolean b) {
                 log.warn("Connection to TwitchIRC Lost");
+                connected = false;
+                LiveStreamIRC.executeInMainThread(this::reconnect);
             }
 
             @Override
@@ -72,7 +77,8 @@ public class TwitchImpl implements IRC {
                 log.error("TwitchIRC Error: " + e.getMessage());
             }
         };
-        client.connect();
+
+        reconnect();
 
     }
 
@@ -84,6 +90,18 @@ public class TwitchImpl implements IRC {
     @Override
     public void leaveChannel(String channel) {
         client.send("PART #"+channel);
+    }
+
+    private void reconnect() {
+        while (!connected) {
+            try {
+                if (!client.connectBlocking()) client.connect();
+                log.info("Connecting ...");
+                Thread.sleep(500);
+            } catch (InterruptedException ex) {
+                ex.printStackTrace();
+            }
+        }
     }
 
  }

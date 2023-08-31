@@ -1,12 +1,15 @@
 package de.theholyexception.livestreamirc.util;
 
 
+import lombok.extern.slf4j.Slf4j;
+
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.util.Objects;
 import java.util.Properties;
 
+@Slf4j
 public class ConfigProperty {
 
     private final File file;
@@ -56,9 +59,12 @@ public class ConfigProperty {
         }
     }
 
-
     public String getValue(Object path) {
         if (properties == null) throw new IllegalStateException("Configuration is not loaded");
+        if (!properties.containsKey(path)) {
+            log.error("Failed to get config value of path: " + path);
+            return null;
+        }
         return properties.get(path).toString();
     }
 

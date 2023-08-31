@@ -1,12 +1,12 @@
 package de.theholyexception.livestreamirc;
 
-import de.theholyexception.livestreamirc.util.Channel;
-import de.theholyexception.livestreamirc.util.ConfigProperty;
-import de.theholyexception.livestreamirc.util.MySQLInterface;
+import com.google.api.services.youtube.YouTube;
+import de.theholyexception.livestreamirc.ircprovider.YoutubeImpl;
+import de.theholyexception.livestreamirc.util.*;
 import de.theholyexception.livestreamirc.ircprovider.IRC;
 import de.theholyexception.livestreamirc.ircprovider.TwitchImpl;
-import de.theholyexception.livestreamirc.util.MessageProvider;
 import de.theholyexception.livestreamirc.webchat.WebChatServer;
+import de.theholyexception.livestreamirc.webchat.WebSocketHandler;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
@@ -14,6 +14,7 @@ import java.io.File;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.*;
+import java.util.concurrent.LinkedBlockingQueue;
 
 @Slf4j
 public class LiveStreamIRC {
@@ -26,6 +27,11 @@ public class LiveStreamIRC {
     private static MessageProvider messageProvider;
     @Getter
     private static final Map<String, IRC> ircList = new HashMap<>(4);
+    @Getter
+    private static final Set<Channel> activeChannels = Collections.synchronizedSet(new HashSet<>());
+    @Getter
+    private static final Map<String, String> channelStreamerMap = new HashMap<>();
+    private static LinkedBlockingQueue<Runnable> mainThreadQueue = new LinkedBlockingQueue<>();
 
     public static void main(String[] args) {
         loadConfig();
@@ -37,8 +43,23 @@ public class LiveStreamIRC {
                                         , properties.getValue("DBDatabase"));
         sqlInterface.connect();
         ircList.put("Twitch", new TwitchImpl());
-        startDBPoll();
+        ircList.put("Youtube", new YoutubeImpl());
         new WebChatServer();
+        new WebSocketHandler();
+        awaitAPIs();
+        startDBPoll();
+        // MUST BE THE LAST!!
+        startMainThreadQueue();
+    }
+
+    private static void awaitAPIs() {
+        try {
+            while (!ircList.values().stream().allMatch(IRC::isConnected)) {
+                Thread.sleep(50);
+            }
+        } catch (InterruptedException ex) {
+            ex.printStackTrace();
+        }
     }
 
     /**
@@ -59,6 +80,9 @@ public class LiveStreamIRC {
         properties.setDefault("WebChatPort", "80");
         properties.setDefault("KeepMessagesMS", "86400000");
         properties.setDefault("TwitchToken", "oauth:");
+        properties.setDefault("WebSocketHost", "localhost");
+        properties.setDefault("WebSocketPort", "8080");
+        properties.setDefault("WebSocketRequestURL", "localhost");
         properties.saveConfig();
     }
 
@@ -66,8 +90,7 @@ public class LiveStreamIRC {
      * Starting DB Polling to get the information about events and channels that are currently streaming
      */
     private static void startDBPoll() {
-        Set<Channel> channelCache = Collections.synchronizedSet(new HashSet<>());
-        new Timer().schedule(new TimerTask() {
+        new Timer("DBPoll").schedule(new TimerTask() {
             @Override
             public void run() {
 
@@ -84,17 +107,22 @@ public class LiveStreamIRC {
                             continue;
                         }
 
-                        if (!channelCache.contains(channel)) {
+                        if (!activeChannels.contains(channel)) {
                             log.debug("Adding channel to " + channel.platform() + " name: " + channel);
-                            channelCache.add(channel);
+                            activeChannels.add(channel);
                             channel.joinChannel();
+                        }
+
+                        String c = channel.platform()+"_"+channel.channelName();
+                        if (!(channelStreamerMap.containsKey(c)) || channelStreamerMap.containsValue(channel.streamer())) {
+                            channelStreamerMap.put(c, channel.streamer());
                         }
                         localChannelCache.add(channel);
                     }
 
                     // Iterates over all channels that are no longer registered for an active event
-                    new HashSet<>(channelCache).stream().filter(e -> !localChannelCache.contains(e)).forEach(channel -> {
-                        channelCache.remove(channel);
+                    new HashSet<>(activeChannels).stream().filter(e -> !localChannelCache.contains(e)).forEach(channel -> {
+                        activeChannels.remove(channel);
                         log.debug("We lost " + channel);
                         channel.leaveChannel();
                     });
@@ -102,8 +130,22 @@ public class LiveStreamIRC {
                 } catch (SQLException ex) {
                     ex.printStackTrace();
                 }
-                sqlInterface.getExecutorHandler().awaitGroup(1);
             }
-        }, 2000, Integer.parseInt(properties.getValue("DBPollInterval")));
+        }, 0, Integer.parseInt(properties.getValue("DBPollInterval")));
+    }
+
+    public static void executeInMainThread(Runnable runnable) {
+        mainThreadQueue.add(runnable);
+    }
+
+    private static void startMainThreadQueue() {
+        while (!Thread.currentThread().isInterrupted()) {
+            try {
+                if (mainThreadQueue.iterator().hasNext()) mainThreadQueue.iterator().next().run();
+                if (mainThreadQueue.isEmpty()) Thread.sleep(50);
+            } catch (Exception ex) {
+                ex.printStackTrace();
+            }
+        }
     }
 }

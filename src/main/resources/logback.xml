@@ -25,7 +25,7 @@
         </triggeringPolicy>
     </appender>
 
-    <logger name="de.minebugdevelopment.caveindustries" level="debug">
+    <logger name="de.theholyexception.livestreamirc" level="debug">
         <appender-ref ref="file"/>
     </logger>
 

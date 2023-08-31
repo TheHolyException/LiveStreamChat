@@ -6,12 +6,13 @@ import lombok.NonNull;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 
-public record Channel(@NonNull String platform, @NonNull String channelName) {
+public record Channel(@NonNull String platform, @NonNull String channelName, @NonNull String streamer) {
 
     public static Channel fromResultSet(ResultSet resultSet) throws SQLException {
         String platform = resultSet.getString("Platform");
         String channelName = resultSet.getString("Channel");
-        return new Channel(platform, channelName);
+        String streamer = resultSet.getString("Streamer").toLowerCase();
+        return new Channel(platform, channelName, streamer);
     }
 
     public void joinChannel() {

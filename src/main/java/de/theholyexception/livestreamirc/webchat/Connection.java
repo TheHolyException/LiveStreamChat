@@ -1,6 +1,7 @@
 package de.theholyexception.livestreamirc.webchat;
 
 import de.theholyexception.livestreamirc.LiveStreamIRC;
+import de.theholyexception.livestreamirc.util.ConfigProperty;
 import de.theholyexception.livestreamirc.util.Message;
 import lombok.extern.slf4j.Slf4j;
 
@@ -9,6 +10,7 @@ import java.net.Socket;
 import java.net.URLDecoder;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Properties;
 import java.util.Set;
 
 @Slf4j
@@ -37,13 +39,18 @@ public class Connection extends Thread {
                 log.debug(args[1]);
                 String[] params = args[1].split("\\?");
 
-                if (args[1].endsWith(".css")) {
-                    String filename = args[1].substring(1);
-                    writeFile("web/"+filename, "text/css");
+                if (args[1].endsWith(".css"))
+                    writeFile("web/"+args[1].substring(1), "text/css");
+
+                else if (args[1].endsWith(".js")) {
+                    ConfigProperty p = LiveStreamIRC.getProperties();
+                    writeFile("web/"+args[1].substring(1), "text/javascript"
+                            ,"###WEBSOCKETURL###", "ws://"+p.getValue("WebSocketHost") + ":" + p.getValue("WebSocketPort"));
                 }
 
                 else if (params.length > 1)
-                    onGet(readHTTPParams(params[1]));
+                    writeFile("web/webchat.html", "text/html", "###streamer###", readHTTPParams(params[1]).get("streamer"));
+
             }
 
         } catch (Exception ex) {
@@ -72,12 +79,13 @@ public class Connection extends Thread {
 
     private void onGet(Map<String, String> params) throws IOException {
         log.debug("onGet");
-        StringBuilder builder = new StringBuilder("<div class=\"messagecontainer\">");
+        /*StringBuilder builder = new StringBuilder("<div class=\"messagecontainer\">");
         Set<Message> messages = LiveStreamIRC.getMessageProvider().getMessages(params.get("channel"));
         if (messages != null)
             messages.forEach(message -> builder.append(String.format("<p>[%s] %s > %s</p>", message.platform(), message.username(), message.message())));
-        builder.append("</div>");
-        writeFile("web/webchat.html", "text/html", "<chat>", builder.toString());
+        builder.append("</div>");*/
+
+        writeFile("web/webchat.html", "text/html", "###streamer###", params.get("streamer"));
     }
 
     private final ByteArrayOutputStream readLineBuffer = new ByteArrayOutputStream(32);
