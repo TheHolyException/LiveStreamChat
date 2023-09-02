@@ -2,12 +2,12 @@ package de.theholyexception.livestreamirc.webchat;
 
 import de.theholyexception.livestreamirc.LiveStreamIRC;
 import de.theholyexception.livestreamirc.util.Channel;
-import de.theholyexception.livestreamirc.util.ConfigProperty;
 import de.theholyexception.livestreamirc.util.Message;
 import lombok.extern.slf4j.Slf4j;
 import org.java_websocket.WebSocket;
 import org.java_websocket.handshake.ClientHandshake;
 import org.java_websocket.server.WebSocketServer;
+import org.tomlj.TomlTable;
 
 import java.net.InetSocketAddress;
 import java.util.*;
@@ -17,11 +17,10 @@ public class WebSocketHandler extends WebSocketServer {
 
     Set<WSClient> wsClients = new HashSet<>();
 
-    public WebSocketHandler() {
-        super(new InetSocketAddress(
-                LiveStreamIRC.getProperties().getValue("WebSocketHost"),
-                Integer.parseInt(LiveStreamIRC.getProperties().getValue("WebSocketPort"))
-        ));
+
+    public WebSocketHandler(TomlTable webSocketConfig) {
+        super(new InetSocketAddress(Objects.requireNonNull(webSocketConfig.getString("host")),
+                Math.toIntExact(Optional.ofNullable(webSocketConfig.getLong("port")).orElse(8000L))));
         this.start();
     }
 
@@ -68,10 +67,7 @@ public class WebSocketHandler extends WebSocketServer {
 
     @Override
     public void onStart() {
-        String host = LiveStreamIRC.getProperties().getValue("WebSocketHost");
-        String port = LiveStreamIRC.getProperties().getValue("WebSocketPort");
-
-        log.info("WebSocket server started on {} Port: {}", host, port);
+        log.info("WebSocket server started on {}", this.getAddress());
     }
 
 }

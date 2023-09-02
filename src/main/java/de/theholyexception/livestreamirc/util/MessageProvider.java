@@ -22,7 +22,7 @@ public class MessageProvider extends Thread {
         addMessage(new Message("Twitch", "redstonebroadcastunion", "TheHolyException", "Hello World!", System.currentTimeMillis()));
         addMessage(new Message("Twitch", "redstonebroadcastunion", "TheHolyException", "Hello World2!", System.currentTimeMillis()));
         addMessage(new Message("Twitch", "redstonebroadcastunion", "TheHolyException", "Hello World!", System.currentTimeMillis()));
-        long keepMessageTime = Long.parseLong(LiveStreamIRC.getProperties().getValue("KeepMessagesMS"));
+        long keepMessageTime = Optional.ofNullable(LiveStreamIRC.getCfg().getTable("engine").getLong("keepMessagesMS")).orElse(86400000L);
         while (!isInterrupted()) {
             long current = System.currentTimeMillis();
             try {

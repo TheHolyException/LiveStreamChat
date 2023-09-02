@@ -6,8 +6,10 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.java_websocket.client.WebSocketClient;
 import org.java_websocket.handshake.ServerHandshake;
+import org.tomlj.TomlTable;
 
 import java.net.URI;
+import java.util.Objects;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -21,12 +23,14 @@ public class TwitchImpl implements IRC {
     @Getter
     private boolean connected = false;
 
+    private final TomlTable twitchConfig;
+
 
     public TwitchImpl() {
+        twitchConfig = LiveStreamIRC.getCfg().getTable("twitch");
         URI twitchAPI;
         try {
-            twitchAPI = new URI(LiveStreamIRC.getProperties().getValue("TwitchAPI"));
-            LiveStreamIRC.getProperties().saveConfig();
+            twitchAPI = new URI(Objects.requireNonNull(twitchConfig.getString("api")));
         } catch (Exception ex) {
             ex.printStackTrace();
             return;
@@ -36,7 +40,7 @@ public class TwitchImpl implements IRC {
             @Override
             public void onOpen(ServerHandshake serverHandshake) {
                 log.info("Connected to TwitchIRC");
-                client.send("PASS " + LiveStreamIRC.getProperties().getValue("TwitchToken"));
+                client.send("PASS " + twitchConfig.getString("token"));
                 client.send("NICK rbu_irc");
                 connected = true;
             }

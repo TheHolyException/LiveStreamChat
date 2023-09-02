@@ -1,6 +1,5 @@
 package de.theholyexception.livestreamirc;
 
-import com.google.api.services.youtube.YouTube;
 import de.theholyexception.livestreamirc.ircprovider.YoutubeImpl;
 import de.theholyexception.livestreamirc.util.*;
 import de.theholyexception.livestreamirc.ircprovider.IRC;
@@ -9,8 +8,14 @@ import de.theholyexception.livestreamirc.webchat.WebChatServer;
 import de.theholyexception.livestreamirc.webchat.WebSocketHandler;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.tomlj.Toml;
+import org.tomlj.TomlParseResult;
+import org.tomlj.TomlTable;
 
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.nio.file.Path;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.*;
@@ -20,7 +25,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 public class LiveStreamIRC {
 
     @Getter
-    private static ConfigProperty properties;
+    private static ConfigProvider cfg;
     @Getter
     private static MySQLInterface sqlInterface;
     @Getter
@@ -36,16 +41,12 @@ public class LiveStreamIRC {
     public static void main(String[] args) {
         loadConfig();
         messageProvider = new MessageProvider();
-        sqlInterface = new MySQLInterface(properties.getValue("DBHost")
-                                        , Integer.parseInt(properties.getValue("DBPort"))
-                                        , properties.getValue("DBUsername")
-                                        , properties.getValue("DBPassword")
-                                        , properties.getValue("DBDatabase"));
+        sqlInterface = new MySQLInterface(cfg.getTable("database"));
         sqlInterface.connect();
         ircList.put("Twitch", new TwitchImpl());
         ircList.put("Youtube", new YoutubeImpl());
         new WebChatServer();
-        new WebSocketHandler();
+        new WebSocketHandler(cfg.getTable("websocket"));
         awaitAPIs();
         startDBPoll();
         // MUST BE THE LAST!!
@@ -66,30 +67,22 @@ public class LiveStreamIRC {
      * Loads the configuration and sets default values if they are missing in the file
      */
     private static void loadConfig() {
-        properties = new ConfigProperty(new File("./config.properties"), "");
-        properties.createNewIfNotExists();
-        properties.loadConfig();
-        properties.setDefault("TwitchAPI", "wss://irc-ws.chat.twitch.tv:443");
-        properties.setDefault("DBPollInterval", "10000");
-        properties.setDefault("DBHost", "localhost");
-        properties.setDefault("DBPort", "3306");
-        properties.setDefault("DBUsername", "irc");
-        properties.setDefault("DBPassword", "1234");
-        properties.setDefault("DBDatabase", "livestreamirc");
-        properties.setDefault("WebChatHost", "localhost");
-        properties.setDefault("WebChatPort", "80");
-        properties.setDefault("KeepMessagesMS", "86400000");
-        properties.setDefault("TwitchToken", "oauth:");
-        properties.setDefault("WebSocketHost", "localhost");
-        properties.setDefault("WebSocketPort", "8080");
-        properties.setDefault("WebSocketRequestURL", "localhost");
-        properties.saveConfig();
+        try {
+            TomlParseResult result = Toml.parse(Path.of("./config.toml"));
+            result.errors().forEach(Throwable::printStackTrace);
+            cfg = new ConfigProvider(result);
+        } catch (IOException ex) {
+            if (log.isDebugEnabled()) ex.printStackTrace();
+            log.error("Failed to load Configuration - " + ex.getMessage());
+            System.exit(2);
+        }
     }
 
     /**
      * Starting DB Polling to get the information about events and channels that are currently streaming
      */
     private static void startDBPoll() {
+        long pollInterval = Optional.ofNullable(cfg.getTable("database").getLong("poll-interval")).orElse(2000L);
         new Timer("DBPoll").schedule(new TimerTask() {
             @Override
             public void run() {
@@ -131,7 +124,7 @@ public class LiveStreamIRC {
                     ex.printStackTrace();
                 }
             }
-        }, 0, Integer.parseInt(properties.getValue("DBPollInterval")));
+        }, 0, pollInterval);
     }
 
     public static void executeInMainThread(Runnable runnable) {

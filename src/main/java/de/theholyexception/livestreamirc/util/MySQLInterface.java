@@ -2,8 +2,10 @@ package de.theholyexception.livestreamirc.util;
 
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.tomlj.TomlTable;
 
 import java.sql.*;
+import java.util.Optional;
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.concurrent.Executors;
@@ -25,13 +27,13 @@ public class MySQLInterface {
     @Getter
     ExecutorHandler executorHandler;
 
-    public MySQLInterface(String address, int port, String username, String password, String database) {
+    public MySQLInterface(TomlTable table) {
         this.executorHandler = new ExecutorHandler(Executors.newFixedThreadPool(2));
-        this.address = address;
-        this.port = port;
-        this.database = database;
-        this.username = username;
-        this.password = password;
+        this.address = table.getString("host");
+        this.port = Math.toIntExact(Optional.ofNullable(table.getLong("port")).orElse(3306L));
+        this.database = table.getString("databse");
+        this.username = table.getString("username");
+        this.password = table.getString("password");
 
         // Keep reconnecting
         new Timer().schedule(new TimerTask() {

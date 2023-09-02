@@ -1,17 +1,14 @@
 package de.theholyexception.livestreamirc.webchat;
 
 import de.theholyexception.livestreamirc.LiveStreamIRC;
-import de.theholyexception.livestreamirc.util.ConfigProperty;
-import de.theholyexception.livestreamirc.util.Message;
 import lombok.extern.slf4j.Slf4j;
+import org.tomlj.TomlTable;
 
 import java.io.*;
 import java.net.Socket;
 import java.net.URLDecoder;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Properties;
-import java.util.Set;
 
 @Slf4j
 public class Connection extends Thread {
@@ -43,9 +40,9 @@ public class Connection extends Thread {
                     writeFile("web/"+args[1].substring(1), "text/css");
 
                 else if (args[1].endsWith(".js")) {
-                    ConfigProperty p = LiveStreamIRC.getProperties();
+                    TomlTable table = LiveStreamIRC.getCfg().getTable("websocket");
                     writeFile("web/"+args[1].substring(1), "text/javascript"
-                            ,"###WEBSOCKETURL###", "ws://"+p.getValue("WebSocketHost") + ":" + p.getValue("WebSocketPort"));
+                            ,"###WEBSOCKETURL###", "ws://"+table.getString("WebSocketHost") + ":" + table.getString("WebSocketPort"));
                 }
 
                 else if (params.length > 1)
