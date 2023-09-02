@@ -22,8 +22,9 @@ public class MySQLInterface {
     @Getter
     private Connection connection;
 
-    private final int resultSetType        = ResultSet.TYPE_SCROLL_SENSITIVE;
-    private final int resultSetConcurrency = ResultSet.CONCUR_UPDATABLE;
+    private static final int RESULT_SET_TYPE = ResultSet.TYPE_SCROLL_SENSITIVE;
+    private static final int RESULT_SET_CONCURRENCY = ResultSet.CONCUR_UPDATABLE;
+
     @Getter
     ExecutorHandler executorHandler;
 
@@ -86,7 +87,7 @@ public class MySQLInterface {
     public ResultSet executeQuery(String query) {
         ResultSet resultSet = null;
         try {
-            Statement statement = connection.createStatement(resultSetType, resultSetConcurrency);
+            Statement statement = connection.createStatement(RESULT_SET_TYPE, RESULT_SET_CONCURRENCY);
             resultSet = statement.executeQuery(query);
             statement.closeOnCompletion();
         } catch (SQLException ex) {

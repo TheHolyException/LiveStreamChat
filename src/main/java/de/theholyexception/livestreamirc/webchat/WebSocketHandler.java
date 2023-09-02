@@ -2,7 +2,6 @@ package de.theholyexception.livestreamirc.webchat;
 
 import de.theholyexception.livestreamirc.LiveStreamIRC;
 import de.theholyexception.livestreamirc.util.Channel;
-import de.theholyexception.livestreamirc.util.Message;
 import lombok.extern.slf4j.Slf4j;
 import org.java_websocket.WebSocket;
 import org.java_websocket.handshake.ClientHandshake;
@@ -50,12 +49,7 @@ public class WebSocketHandler extends WebSocketServer {
             }
 
             LiveStreamIRC.getMessageProvider().addSubscriber(webSocket, wsClient.getStreamer());
-            Set<Message> messages = LiveStreamIRC.getMessageProvider().getMessages(wsClient.getStreamer());
-            StringBuilder builder = new StringBuilder();
-            for (Message message : messages) {
-                builder.append(String.format("%s,%s,%s,%s,%s\n", message.timestamp(), message.platform(), message.channel(), message.b64Username(), message.b64Message()));
-            }
-            webSocket.send(builder.toString());
+            LiveStreamIRC.getMessageProvider().sendCachedMessages(webSocket, wsClient.getStreamer());
         });
     }
 

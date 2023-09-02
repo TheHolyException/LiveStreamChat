@@ -1,6 +1,5 @@
 package de.theholyexception.livestreamirc;
 
-import de.theholyexception.livestreamirc.ircprovider.YoutubeImpl;
 import de.theholyexception.livestreamirc.util.*;
 import de.theholyexception.livestreamirc.ircprovider.IRC;
 import de.theholyexception.livestreamirc.ircprovider.TwitchImpl;
@@ -10,10 +9,7 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.tomlj.Toml;
 import org.tomlj.TomlParseResult;
-import org.tomlj.TomlTable;
 
-import java.io.File;
-import java.io.FileInputStream;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.sql.ResultSet;
@@ -44,7 +40,7 @@ public class LiveStreamIRC {
         sqlInterface = new MySQLInterface(cfg.getTable("database"));
         sqlInterface.connect();
         ircList.put("Twitch", new TwitchImpl());
-        ircList.put("Youtube", new YoutubeImpl());
+        //ircList.put("Youtube", new YoutubeImpl());
         new WebChatServer();
         new WebSocketHandler(cfg.getTable("websocket"));
         awaitAPIs();
@@ -86,7 +82,6 @@ public class LiveStreamIRC {
         new Timer("DBPoll").schedule(new TimerTask() {
             @Override
             public void run() {
-
                 try (ResultSet result = getSqlInterface().executeQuery("call getActiveStreams")) {
                     Set<Channel> localChannelCache = new HashSet<>();
                     while (result.next()) {

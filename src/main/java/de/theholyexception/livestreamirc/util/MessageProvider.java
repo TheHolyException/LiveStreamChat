@@ -18,10 +18,10 @@ public class MessageProvider extends Thread {
 
     @Override
     public void run() {
-        try {Thread.sleep(4000);}catch(Exception e){}
+        try {Thread.sleep(4000);}catch(Exception e){e.printStackTrace();}
         addMessage(new Message("Twitch", "redstonebroadcastunion", "TheHolyException", "Hello World!", System.currentTimeMillis()));
         addMessage(new Message("Twitch", "redstonebroadcastunion", "TheHolyException", "Hello World2!", System.currentTimeMillis()));
-        addMessage(new Message("Twitch", "redstonebroadcastunion", "TheHolyException", "Hello World!", System.currentTimeMillis()));
+        addMessage(new Message("Twitch", "kaigermany_", "TheHolyException", "Hello World!", System.currentTimeMillis()));
         long keepMessageTime = Optional.ofNullable(LiveStreamIRC.getCfg().getTable("engine").getLong("keepMessagesMS")).orElse(86400000L);
         while (!isInterrupted()) {
             long current = System.currentTimeMillis();
@@ -46,9 +46,10 @@ public class MessageProvider extends Thread {
         log.debug("Adding message: " + message);
         messageCache.computeIfAbsent(streamer, key -> new HashSet<>()).add(message);
 
-        webSocketSubscribers.entrySet().stream().filter(entry -> entry.getValue().equalsIgnoreCase(streamer)).forEach(entry -> {
-            sendMessage(entry.getKey(), message);
-        });
+        webSocketSubscribers.entrySet()
+                .stream()
+                .filter(entry -> entry.getValue().equalsIgnoreCase(streamer))
+                .forEach(entry -> sendMessage(entry.getKey(), message));
     }
 
     private void removeMessage(Message message) {
@@ -62,16 +63,20 @@ public class MessageProvider extends Thread {
         webSocketSubscribers.put(socket, streamer);
     }
 
+    public void sendCachedMessages(WebSocket socket, String streamer) {
+        StringBuilder builder = new StringBuilder();
+        for (Message message : getMessages(streamer)) {
+            builder.append(String.format("%s,%s,%s,%s,%s%n", message.timestamp(), message.platform(), message.channel(), message.b64Username(), message.b64Message()));
+        }
+        socket.send(builder.toString());
+    }
+
     public void removeSubscriber(WebSocket socket) {
         webSocketSubscribers.remove(socket);
     }
 
-    public void sendMessage(WebSocket socket, Message... messages) {
-        StringBuilder builder = new StringBuilder();
-        for (Message message : messages) {
-            builder.append(String.format("%s,%s,%s,%s,%s\n", message.timestamp(), message.platform(), message.channel(), message.b64Username(), message.b64Message()));
-        }
-        socket.send(builder.toString());
+    public void sendMessage(WebSocket socket, Message message) {
+        socket.send(String.format("%s,%s,%s,%s,%s%n", message.timestamp(), message.platform(), message.channel(), message.b64Username(), message.b64Message()));
     }
 
 }

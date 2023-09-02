@@ -7,6 +7,7 @@ import org.tomlj.TomlTable;
 import java.io.*;
 import java.net.Socket;
 import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -30,10 +31,8 @@ public class Connection extends Thread {
         try {
             String[] args = readLine().split(" ");
             String methode = args[0];
-            log.debug(methode);
 
             if (methode.equals("GET")) {
-                log.debug(args[1]);
                 String[] params = args[1].split("\\?");
 
                 if (args[1].endsWith(".css"))
@@ -42,7 +41,7 @@ public class Connection extends Thread {
                 else if (args[1].endsWith(".js")) {
                     TomlTable table = LiveStreamIRC.getCfg().getTable("websocket");
                     writeFile("web/"+args[1].substring(1), "text/javascript"
-                            ,"###WEBSOCKETURL###", "ws://"+table.getString("WebSocketHost") + ":" + table.getString("WebSocketPort"));
+                            ,"###WEBSOCKETURL###", "ws://"+table.getString("host") + ":" + table.getLong("port"));
                 }
 
                 else if (params.length > 1)
@@ -74,17 +73,6 @@ public class Connection extends Thread {
         }
     }
 
-    private void onGet(Map<String, String> params) throws IOException {
-        log.debug("onGet");
-        /*StringBuilder builder = new StringBuilder("<div class=\"messagecontainer\">");
-        Set<Message> messages = LiveStreamIRC.getMessageProvider().getMessages(params.get("channel"));
-        if (messages != null)
-            messages.forEach(message -> builder.append(String.format("<p>[%s] %s > %s</p>", message.platform(), message.username(), message.message())));
-        builder.append("</div>");*/
-
-        writeFile("web/webchat.html", "text/html", "###streamer###", params.get("streamer"));
-    }
-
     private final ByteArrayOutputStream readLineBuffer = new ByteArrayOutputStream(32);
     private String readLine() throws IOException {
         int chr;
@@ -104,24 +92,15 @@ public class Connection extends Thread {
         if(meta == null) return out;
         String[] args = meta.split("&");
         for (String arg : args) {
-            String[] subArgs = _split(arg, "=");
+            String[] subArgs = split(arg, "=");
             if (subArgs.length > 1) {
-                out.put(subArgs[0], URLDecoder.decode(subArgs[1]));
+                out.put(subArgs[0], URLDecoder.decode(subArgs[1], StandardCharsets.UTF_8));
             }
         }
         return out;
     }
-    private Map<String, String> readHTTPBody() throws IOException {
-        HashMap<String, String> out = new HashMap<>();
-        String row = readLine();
-        while(row.length() > 0) {
-            String[] subArgs = _split(row, ":");
-            out.put(subArgs[0].toLowerCase(), subArgs[1].trim());
-        }
-        return out;
-    }
 
-    public static String[] _split(String src, String filter) {
+    public static String[] split(String src, String filter) {
         int i = 0;
         int last = 0;
         int len = 1;
