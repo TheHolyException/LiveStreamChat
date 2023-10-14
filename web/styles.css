@@ -1,3 +1,29 @@
 .config {
     display: none;
 }
+
+body {
+    /*background-color: rgba(255,255,255,255);*/
+    font-size: 30px;
+}
+
+#messagecontainer {
+    display: flex;
+    flex-direction: column;
+}
+
+
+.msgPackage {
+    display: flex;
+}
+
+.msgPackage > img {
+    display: inline;
+    width: 30px;
+    height: 30px;
+}
+
+.msgPackage > p {
+    margin: 0;
+    color: black;
+}

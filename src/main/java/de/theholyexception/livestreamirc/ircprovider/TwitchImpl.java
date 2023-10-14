@@ -1,6 +1,7 @@
 package de.theholyexception.livestreamirc.ircprovider;
 
 import de.theholyexception.livestreamirc.LiveStreamIRC;
+import de.theholyexception.livestreamirc.util.Channel;
 import de.theholyexception.livestreamirc.util.Message;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
@@ -9,6 +10,10 @@ import org.java_websocket.handshake.ServerHandshake;
 import org.tomlj.TomlTable;
 
 import java.net.URI;
+import java.net.URISyntaxException;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Objects;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -24,6 +29,7 @@ public class TwitchImpl implements IRC {
     private boolean connected = false;
 
     private final TomlTable twitchConfig;
+    private final Map<String, Channel> channelMap = Collections.synchronizedMap(new HashMap<>());
 
 
     public TwitchImpl() {
@@ -31,8 +37,9 @@ public class TwitchImpl implements IRC {
         URI twitchAPI;
         try {
             twitchAPI = new URI(Objects.requireNonNull(twitchConfig.getString("api")));
-        } catch (Exception ex) {
-            ex.printStackTrace();
+        } catch (URISyntaxException ex) {
+            if (log.isDebugEnabled()) ex.printStackTrace();
+            log.error("Failed to load twitch API " + ex.getMessage());
             return;
         }
 
@@ -63,7 +70,9 @@ public class TwitchImpl implements IRC {
                         return;
                     }
 
-                    Message message = new Message("Twitch", other.group(1), username.group(1), other.group(2), System.currentTimeMillis());
+                    Channel channel = channelMap.get(other.group(1));
+
+                    Message message = new Message(channel, username.group(1), other.group(2), System.currentTimeMillis());
                     LiveStreamIRC.getMessageProvider().addMessage(message);
                 }
             }
@@ -87,13 +96,15 @@ public class TwitchImpl implements IRC {
     }
 
     @Override
-    public void joinChannel(String channel) {
-        client.send("JOIN #"+channel);
+    public void joinChannel(Channel channel) {
+        client.send("JOIN #"+channel.streamURL());
+        channelMap.put(channel.streamURL(), channel);
     }
 
     @Override
-    public void leaveChannel(String channel) {
-        client.send("PART #"+channel);
+    public void leaveChannel(Channel channel) {
+        channelMap.remove(channel.streamURL());
+        client.send("PART #"+channel.streamURL());
     }
 
     private void reconnect() {

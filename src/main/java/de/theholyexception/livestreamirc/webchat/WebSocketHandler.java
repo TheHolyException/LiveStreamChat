@@ -17,6 +17,7 @@ public class WebSocketHandler extends WebSocketServer {
     Set<WSClient> wsClients = new HashSet<>();
 
 
+
     public WebSocketHandler(TomlTable webSocketConfig) {
         super(new InetSocketAddress(Objects.requireNonNull(webSocketConfig.getString("host")),
                 Math.toIntExact(Optional.ofNullable(webSocketConfig.getLong("port")).orElse(8000L))));
@@ -31,25 +32,29 @@ public class WebSocketHandler extends WebSocketServer {
     @Override
     public void onClose(WebSocket webSocket, int i, String s, boolean b) {
         Optional<WSClient> optionalWSClient = wsClients.stream().filter(ws -> ws.getWebSocket().equals(webSocket)).findFirst();
-        optionalWSClient.ifPresent(wsClient -> wsClients.remove(wsClient));
+        optionalWSClient.ifPresent(wsClient -> {
+            wsClients.remove(wsClient);
+            LiveStreamIRC.getMessageProvider().removeSubscriber(wsClient);
+        });
     }
 
     @Override
     public void onMessage(WebSocket webSocket, String s) {
         Optional<WSClient> optionalWSClient = wsClients.stream().filter(ws -> ws.getWebSocket().equals(webSocket)).findFirst();
         optionalWSClient.ifPresent(wsClient -> {
-            if (wsClient.getStreamer() != null) log.warn("WebSocket subscribed to new streamer");
-            String streamer = s.toLowerCase();
-            wsClient.setStreamer(streamer);
+            if (wsClient.getEventID() != null) log.warn("WebSocket subscribed to new streamer");
+            long eventID = Long.parseLong(s.split(",")[0]);
+            int maxMessages = Integer.parseInt(s.split(",")[1]);
+            wsClient.setEventID(eventID);
 
-            Optional<Channel> optionalChannel = LiveStreamIRC.getActiveChannels().stream().filter(channel -> channel.streamer().equals(streamer)).findFirst();
+            Optional<Channel> optionalChannel = LiveStreamIRC.getActiveChannels().stream().filter(channel -> channel.event() == eventID).findFirst();
             if (optionalChannel.isEmpty()) {
-                log.error("Failed to get channel for streamer {}", streamer);
+                log.error("Failed to get channel for streamer {}", eventID);
                 return;
             }
 
-            LiveStreamIRC.getMessageProvider().addSubscriber(webSocket, wsClient.getStreamer());
-            LiveStreamIRC.getMessageProvider().sendCachedMessages(webSocket, wsClient.getStreamer());
+            LiveStreamIRC.getMessageProvider().addSubscriber(wsClient);
+            LiveStreamIRC.getMessageProvider().sendCachedMessages(wsClient, maxMessages);
         });
     }
 

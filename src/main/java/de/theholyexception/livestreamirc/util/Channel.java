@@ -6,20 +6,21 @@ import lombok.NonNull;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 
-public record Channel(@NonNull String platform, @NonNull String channelName, @NonNull String streamer) {
+public record Channel(@NonNull String platform, @NonNull String streamURL, @NonNull String streamer, long event) {
 
     public static Channel fromResultSet(ResultSet resultSet) throws SQLException {
         String platform = resultSet.getString("Platform");
-        String channelName = resultSet.getString("Channel");
+        String streamURL = resultSet.getString("StreamURL");
         String streamer = resultSet.getString("Streamer").toLowerCase();
-        return new Channel(platform, channelName, streamer);
+        long eventID = resultSet.getLong("EventID");
+        return new Channel(platform, streamURL, streamer, eventID);
     }
 
     public void joinChannel() {
-        LiveStreamIRC.getIrcList().get(platform).joinChannel(channelName);
+        LiveStreamIRC.getIrcList().get(platform).joinChannel(this);
     }
     public void leaveChannel() {
-        LiveStreamIRC.getIrcList().get(platform).leaveChannel(channelName);
+        LiveStreamIRC.getIrcList().get(platform).leaveChannel(this);
     }
 
 }

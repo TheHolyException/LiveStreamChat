@@ -2,7 +2,7 @@ package de.theholyexception.livestreamirc.util;
 
 import java.util.Base64;
 
-public record Message(String platform, String channel, String username, String message, long timestamp) {
+public record Message(Channel channel, String username, String message, long timestamp) {
 
     public String b64Message() {
         return new String(Base64.getEncoder().encode(message.getBytes()));

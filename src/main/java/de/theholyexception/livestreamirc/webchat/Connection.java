@@ -8,8 +8,7 @@ import java.io.*;
 import java.net.Socket;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 
 @Slf4j
 public class Connection extends Thread {
@@ -17,6 +16,8 @@ public class Connection extends Thread {
     private final Socket socket;
     private final BufferedInputStream bis;
     private final BufferedOutputStream bos;
+
+    private static Set<WSClient> wsClients = Collections.synchronizedSet(new HashSet<>());
 
 
     public Connection(Socket socket) throws IOException {
@@ -30,8 +31,60 @@ public class Connection extends Thread {
     public void run() {
         try {
             String[] args = readLine().split(" ");
-            String methode = args[0];
 
+            if (args[1].equalsIgnoreCase("/ws")) {
+                handleWebsocket();
+            } else {
+                handelHTTP(args);
+            }
+        } catch (IOException ex) {
+            ex.printStackTrace();
+        }
+    }
+
+    private void handleWebsocket() throws IOException {
+//        WebSocketServer server = new WebSocketServer(bis, bos, new WebSocketServer.PacketReceivedEvent() {
+//            @Override
+//            public void onReceived(byte[] data, WebSocketServer webSocket) {
+//                String s = new String(data);
+//                System.out.println(s);
+//                webSocket.send("OK");
+//
+//                Optional<WSClient> optionalWSClient = wsClients.stream().filter(ws -> ws.getWebSocket().equals(webSocket)).findFirst();
+//                optionalWSClient.ifPresent(wsClient -> {
+//                    if (wsClient.getEventID() != null) log.warn("WebSocket subscribed to new streamer");
+//                    long eventID = Long.parseLong(s.split(",")[0]);
+//                    int maxMessages = Integer.parseInt(s.split(",")[1]);
+//                    wsClient.setEventID(eventID);
+//
+//                    Optional<Channel> optionalChannel = LiveStreamIRC.getActiveChannels().stream().filter(channel -> channel.event() == eventID).findFirst();
+//                    if (optionalChannel.isEmpty()) {
+//                        log.error("Failed to get channel for streamer {}", eventID);
+//                        return;
+//                    }
+//
+//                    LiveStreamIRC.getMessageProvider().addSubscriber(wsClient);
+//                    LiveStreamIRC.getMessageProvider().sendCachedMessages(wsClient, maxMessages);
+//                });
+//            }
+//
+//            @Override
+//            public void onClosed(byte[] data, WebSocketServer webSocket) {
+//                Optional<WSClient> optionalWSClient = wsClients.stream().filter(ws -> ws.getWebSocket().equals(webSocket)).findFirst();
+//                optionalWSClient.ifPresent(wsClient -> {
+//                    wsClients.remove(wsClient);
+//                    LiveStreamIRC.getMessageProvider().removeSubscriber(wsClient);
+//                });
+//                System.out.println("Websocket closed");
+//            }
+//        });
+//        System.out.println("WebSocketServer: Connection open.");
+//        wsClients.add(new WSClient(server));
+    }
+
+    private void handelHTTP(String[] args) {
+        String methode = args[0];
+        try {
             if (methode.equals("GET")) {
                 String[] params = args[1].split("\\?");
 
@@ -41,14 +94,23 @@ public class Connection extends Thread {
                 else if (args[1].endsWith(".js")) {
                     TomlTable table = LiveStreamIRC.getCfg().getTable("websocket");
                     writeFile("web/"+args[1].substring(1), "text/javascript"
-                            ,"###WEBSOCKETURL###", "ws://"+table.getString("host") + ":" + table.getLong("port"));
+                            ,"###WEBSOCKETURL###", table.getString("requestURL") + ":" + table.getLong("port")
+                    );
                 }
 
-                else if (params.length > 1)
-                    writeFile("web/webchat.html", "text/html", "###streamer###", readHTTPParams(params[1]).get("streamer"));
+                else if (args[1].endsWith(".png")) {
+                    System.out.println(args[1].substring(1));
+                    writeFile("web/"+args[1].substring(1), "image/png");
+                }
+
+                else if (params.length > 1) {
+                    writeFile("web/webchat.html", "text/html"
+                            //, "###eventid###", readHTTPParams(params[1]).get("event-id")
+                    );
+
+                }
 
             }
-
         } catch (Exception ex) {
             try {
                 bos.write(("""
@@ -122,7 +184,6 @@ public class Connection extends Thread {
 
     private void writeHeader(String contentType, long l, OutputStream os) throws IOException {
         os.write(String.format("""
-
                 HTTP/1.1 200 OK
                 Content-Type: %s
                 Content-Length: %s

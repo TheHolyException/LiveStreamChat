@@ -8,7 +8,7 @@ public class WSClient {
     @Getter
     private WebSocket webSocket;
     @Getter @Setter
-    private String streamer;
+    private Long eventID;
 
     WSClient(WebSocket socket) {
         this.webSocket = socket;

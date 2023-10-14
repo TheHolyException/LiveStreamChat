@@ -1,5 +1,6 @@
 package de.theholyexception.livestreamirc;
 
+import de.theholyexception.livestreamirc.ircprovider.YoutubeImpl;
 import de.theholyexception.livestreamirc.util.*;
 import de.theholyexception.livestreamirc.ircprovider.IRC;
 import de.theholyexception.livestreamirc.ircprovider.TwitchImpl;
@@ -16,6 +17,8 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.*;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 @Slf4j
 public class LiveStreamIRC {
@@ -40,12 +43,17 @@ public class LiveStreamIRC {
         sqlInterface = new MySQLInterface(cfg.getTable("database"));
         sqlInterface.connect();
         ircList.put("Twitch", new TwitchImpl());
-        //ircList.put("Youtube", new YoutubeImpl());
+        ircList.put("YouTube", new YoutubeImpl());
         new WebChatServer();
         new WebSocketHandler(cfg.getTable("websocket"));
         awaitAPIs();
         startDBPoll();
         // MUST BE THE LAST!!
+
+        log.info("---------------------------------------");
+        log.info("LiveStream IRC");
+        log.info("System Ready!");
+        log.info("---------------------------------------");
         startMainThreadQueue();
     }
 
@@ -82,18 +90,11 @@ public class LiveStreamIRC {
         new Timer("DBPoll").schedule(new TimerTask() {
             @Override
             public void run() {
-                try (ResultSet result = getSqlInterface().executeQuery("call getActiveStreams")) {
+                try (ResultSet result = getSqlInterface().executeQuery("call getActiveStreams2")) {
+                    if (result == null) return;
                     Set<Channel> localChannelCache = new HashSet<>();
                     while (result.next()) {
                         Channel channel = Channel.fromResultSet(result);
-                        long timestamp = result.getLong("Timestamp");
-                        long duration = result.getLong("Duration");
-                        long current = System.currentTimeMillis()/1000;
-
-                        if (!(current > timestamp && current < timestamp+duration)) {
-                            log.debug("Out of time-range");
-                            continue;
-                        }
 
                         if (!activeChannels.contains(channel)) {
                             log.debug("Adding channel to " + channel.platform() + " name: " + channel);
@@ -101,7 +102,7 @@ public class LiveStreamIRC {
                             channel.joinChannel();
                         }
 
-                        String c = channel.platform()+"_"+channel.channelName();
+                        String c = channel.platform()+"_"+channel.streamURL();
                         if (!(channelStreamerMap.containsKey(c)) || channelStreamerMap.containsValue(channel.streamer())) {
                             channelStreamerMap.put(c, channel.streamer());
                         }
