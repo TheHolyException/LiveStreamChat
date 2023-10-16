@@ -4,30 +4,31 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Map.Entry;
 
 public class SmartHTTPSRequestManager {
-	private static HashMap<String, ObjectStream<ReuseableHTTPSClient>> clientInstances = new HashMap<String, ObjectStream<ReuseableHTTPSClient>>();
-	private static HashMap<String, Long> clientInstancesLastUse = new HashMap<String, Long>();
-	private static HashMap<String, Integer> clientInstancesInUse = new HashMap<String, Integer>();
+	private static final Map<String, ObjectStream<ReuseableHTTPSClient>> clientInstances = new HashMap<>();
+	private static final Map<String, Long> clientInstancesLastUse = new HashMap<>();
+	private static final Map<String, Integer> clientInstancesInUse = new HashMap<>();
 	private static long connectionTimeoutMS = 60 * 1000;
 	private static volatile CleanupThread cleanupThread;
 
-	public static ReuseableHTTPSClient.Result request(String server, int port, String page, String requestMethod, HashMap<String, String> headerFields, byte[] postData) throws IOException {
+	public static ReuseableHTTPSClient.Result request(String server, int port, String page, String requestMethod, Map<String, String> headerFields, byte[] postData) throws IOException {
 		return request(server, port, page, requestMethod, headerFields, postData, 10, false);
 	}
 	
-	public static ReuseableHTTPSClient.Result request(String server, int port, String page, String requestMethod, HashMap<String, String> headerFields, byte[] postData, boolean useAlternativeEOFDetector) throws IOException {
+	public static ReuseableHTTPSClient.Result request(String server, int port, String page, String requestMethod, Map<String, String> headerFields, byte[] postData, boolean useAlternativeEOFDetector) throws IOException {
 		return request(server, port, page, requestMethod, headerFields, postData, 10, useAlternativeEOFDetector);
 	}
 	
 	@SuppressWarnings("resource")
-	public static ReuseableHTTPSClient.Result request(String server, int port, String page, String requestMethod, HashMap<String, String> headerFields, byte[] postData, int maxSocketCount, boolean useAlternativeEOFDetector) throws IOException {
+	public static ReuseableHTTPSClient.Result request(String server, int port, String page, String requestMethod, Map<String, String> headerFields, byte[] postData, int maxSocketCount, boolean useAlternativeEOFDetector) throws IOException {
 		String k = server + ':' + port;
 		
 		ObjectStream<ReuseableHTTPSClient> a;
 		synchronized(clientInstances){
-			if((a = clientInstances.get(k)) == null) clientInstances.put(k, a = new ObjectStream<ReuseableHTTPSClient>());
+			if((a = clientInstances.get(k)) == null) clientInstances.put(k, a = new ObjectStream<>());
 		}
 		
 		ReuseableHTTPSClient c;

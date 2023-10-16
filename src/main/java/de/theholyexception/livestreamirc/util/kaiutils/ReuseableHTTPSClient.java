@@ -9,6 +9,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.SocketTimeoutException;
 import java.util.HashMap;
+import java.util.Map;
 import java.util.Map.Entry;
 
 import javax.net.ssl.SSLSocket;
@@ -22,7 +23,7 @@ public class ReuseableHTTPSClient implements Closeable {
 	
 	private static final HashMap<String, String> defaultHeader;
 	static{
-		defaultHeader = new HashMap<String, String>(11);
+		defaultHeader = new HashMap<>(11);
 		defaultHeader.put("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:75.0) Gecko/20100101 Firefox/75.0");
 		defaultHeader.put("Connection", "keep-alive");
 		defaultHeader.put("DNT", "1");
@@ -36,11 +37,10 @@ public class ReuseableHTTPSClient implements Closeable {
 		os = socket.getOutputStream();
 	}
 	
-	public Result request(String page, String requestMethod, HashMap<String, String> headerFields, byte[] postData, boolean useAlternativeEOFDetector) throws IOException {
-		if(page == null || page.length() == 0 || page.charAt(0) != '/') page = "/" + (page == null ? "" : page);
+	public Result request(String page, String requestMethod, Map<String, String> headerFields, byte[] postData, boolean useAlternativeEOFDetector) throws IOException {
+		if(page == null || page.isEmpty() || page.charAt(0) != '/') page = "/" + (page == null ? "" : page);
 		if(requestMethod == null) requestMethod = "GET";
-		if(headerFields == null) headerFields = new HashMap<String, String>();
-		//headerFields.putAll(defaultHeader);
+		if(headerFields == null) headerFields = new HashMap<>();
 		for(Entry<String, String> e : defaultHeader.entrySet()){
 			if(headerFields.containsKey(e.getKey())) continue;
 			headerFields.put(e.getKey(), e.getValue());
@@ -61,13 +61,7 @@ public class ReuseableHTTPSClient implements Closeable {
 			os.write(postData);
 		}
 		os.flush();
-		
-		//s = "GET /" + page + " HTTP/1.1\r\nUser-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:75.0) Gecko/20100101 Firefox/75.0\r\nContent-Type: application/x-www-form-urlencoded;charset=utf-8\r\n\r\n";
-		//s = "GET /" + page + " HTTP/1.1\r\nUser-Agent: " + URLEncoder.encode("Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:75.0) Gecko/20100101 Firefox/75.0") + "\r\nAccept-Language: " + URLEncoder.encode("de,en-US;q=0.7,en;q=0.3") + "\r\nConnection: keep-alive\r\nDNT: 1\r\n\r\n";
-		//s = "GET /" + page + " HTTP/1.1\r\n\r\n";
-		//s = "GET /" + page + " HTTP/1.1\r\n: " + host + "\r\nUser-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:75.0) Gecko/20100101 Firefox/75.0\r\nAccept-Language: de,en-US;q=0.7,en;q=0.3\r\nConnection: keep-alive\r\nDNT: 1\r\n\r\n";
-		//System.out.println("GET " + page + " HTTP/1.1");
-		
+
 		String len = null;
 		int responseCode;
 		HashMap<String, String> resultHeader = new HashMap<String, String>();
@@ -75,16 +69,13 @@ public class ReuseableHTTPSClient implements Closeable {
 		{
 			String line = readLine(is);
 			responseCode = Integer.parseInt(line.split(" ")[1]);
-			//if(!line.endsWith("200 OK")) return null;
 			while((line = readLine(is)).length() > 2){
 				int p = line.indexOf(':');
 				if(p == -1) break;
 				String k = line.substring(0, p);
 				String v = line.substring(p+1).trim();
-				//System.out.println("k=" + k);
-				//System.out.println("v=" + v);
-				if(k.toLowerCase().equals("content-length")) len = v;
-				if(k.toLowerCase().equals("transfer-encoding") && v.equals("chunked")) isChunkedEncoding = true;
+				if(k.equalsIgnoreCase("content-length")) len = v;
+				if(k.equalsIgnoreCase("transfer-encoding") && v.equals("chunked")) isChunkedEncoding = true;
 				resultHeader.put(k, v);
 			}
 		}
@@ -108,7 +99,6 @@ public class ReuseableHTTPSClient implements Closeable {
 				BufferedInputStream bis = new BufferedInputStream(is, buffer.length * 4);
 				while ((chr = bis.read(buffer)) != -1) {
 					baos.write(buffer, 0, chr);
-					//if(chr < buffer.length) break;
 				}
 			} catch(Exception e) {
 			  if(!(e instanceof SocketTimeoutException)) e.printStackTrace();
@@ -162,16 +152,16 @@ public class ReuseableHTTPSClient implements Closeable {
 			this.header = header;
 			this.responseCode = responseCode;
 		}
-		
+
 		public int getResponseCode(){
 			return responseCode;
 		}
-		
+
 		public byte[] getData(){
 			return content;
 		}
 		
-		public HashMap<String, String> getHeaders(){
+		public Map<String, String> getHeaders(){
 			return header;
 		}
 		

@@ -42,11 +42,6 @@ public class YoutubeImpl extends Thread implements IRC {
     }
 
     @Override
-    public void run() {
-        super.run();
-    }
-
-    @Override
     public boolean isConnected() {
         return true;
     }

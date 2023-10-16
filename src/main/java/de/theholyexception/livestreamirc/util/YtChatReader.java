@@ -3,6 +3,7 @@ package de.theholyexception.livestreamirc.util;
 import de.theholyexception.livestreamirc.LiveStreamIRC;
 import de.theholyexception.livestreamirc.util.kaiutils.ReuseableHTTPSClient;
 import de.theholyexception.livestreamirc.util.kaiutils.SmartHTTPSRequestManager;
+import lombok.extern.slf4j.Slf4j;
 import org.json.simple.JSONArray;
 import org.json.simple.JSONObject;
 import org.json.simple.parser.JSONParser;
@@ -16,6 +17,7 @@ import java.util.Objects;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
 
+@Slf4j
 public class YtChatReader {
     private static final byte[] POST_TEMPLATE = "{\"context\": {\"client\": {\"visitorData\": \"$VISITOR_DATA$\",\"clientName\": \"WEB\",\"clientVersion\": \"$VERSION$\"}},\"continuation\": \"$CONTINUE$\"}".getBytes();
     private String continuationKey;
@@ -23,9 +25,8 @@ public class YtChatReader {
     private final String clientVersion;
     private final Channel channel;
     private final boolean isDebug = Boolean.TRUE.equals(LiveStreamIRC.getCfg().getTable("engine").getBoolean("debug"));
-    //private OutputStream debugStream;
     private static File debugFile;
-    private final List<String> messagequeue = new ArrayList<>();
+    private static final List<String> messageQueue = new ArrayList<>();
 
     public YtChatReader(Channel channel) throws IOException {
         this.channel = channel;
@@ -38,62 +39,9 @@ public class YtChatReader {
 
         if (isDebug && debugFile == null) {
             createNewDebugFile(true);
-            Thread t = new Thread(() -> {
-               while (true) {
-                   try {
-                       Thread.sleep(500);
-                       OutputStream os = new FileOutputStream(debugFile, true);
-                       for (String s : messagequeue) {
-                           os.write((s+"\r\n").getBytes());
-                       }
-                       os.flush();
-                       os.close();
-                       if (Files.size(debugFile.toPath()) > 250_000) createNewDebugFile(false);
-                       messagequeue.clear();
-                   } catch (Exception ex) {
-                       ex.printStackTrace();
-                   }
-               }
-            });
-            t.setName("DEBUG YTDATA COLLECTOR");
+            Thread t = createDebugFileWriter();
             t.start();
         }
-    }
-
-    private static void createNewDebugFile(boolean init) throws IOException {
-        File folder = new File("logs", "debug");
-        if (!init) {
-            File compressed = new File(folder, System.currentTimeMillis()+".ytdebug.gz");
-            try (GZIPOutputStream os = new GZIPOutputStream(new FileOutputStream(compressed))) {
-                for (File file : Objects.requireNonNull(folder.listFiles())) {
-                    if (file.getName().contains(".ytdebug.temp")) {
-                        FileInputStream fis = new FileInputStream(file);
-                        int l = -1;
-                        byte[] buffer = new byte[1024 * 1024];
-                        while ((l = fis.read(buffer)) != -1) {
-                            os.write(buffer, 0, l);
-                        }
-                        fis.close();
-                        Files.delete(file.toPath());
-                    }
-
-                    if (file.getName().contains(".ytdebug.gz") && !file.getName().equalsIgnoreCase(compressed.getName()) && Files.size(file.toPath()) < 100_000_000) {
-                        GZIPInputStream gis = new GZIPInputStream(new FileInputStream(file));
-                        int l = -1;
-                        byte[] buffer = new byte[1024*1024];
-                        while ((l = gis.read(buffer)) != -1) {
-                            os.write(buffer, 0, l);
-                        }
-                        gis.close();
-                        Files.delete(file.toPath());
-                    }
-                }
-            }
-        }
-
-        if (!folder.exists()) folder.mkdirs();
-        debugFile = new File(folder, System.currentTimeMillis()+".ytdebug.temp");
-        debugFile.createNewFile();
     }
 
     public List<Message> read() throws IOException {
@@ -102,8 +50,8 @@ public class YtChatReader {
         if (result.getResponseCode() != 200) throw new IOException("r.getResponseCode() = " + result.getResponseCode());
         String response = new String(result.getData());
         if (isDebug) {
-            synchronized (messagequeue) {
-                messagequeue.add(response);
+            synchronized (messageQueue) {
+                messageQueue.add(response);
             }
         }
         response = response.substring(response.indexOf('{'));
@@ -111,7 +59,7 @@ public class YtChatReader {
         try {
             return parseChat(response);
         } catch (ParseException ex) {
-            System.out.println("Failed to parse Json Content!");
+            log.error("Failed to parse Json Content!");
         }
         return new ArrayList<>();
     }
@@ -157,8 +105,68 @@ public class YtChatReader {
                 }
             }
             sb.append("\r\n");
-            messages.add(new Message(channel, userName, sb.toString(), timestamp));
+            messages.add(new Message(channel, userName, sb.toString(), timestamp/1000));
         }
         return messages;
+    }
+
+    private static Thread createDebugFileWriter() {
+        Thread t = new Thread(() -> {
+            while (true) {
+                try {
+                    Thread.sleep(500);
+                    OutputStream os = new FileOutputStream(debugFile, true);
+                    for (String s : messageQueue) {
+                        os.write((s+"\r\n").getBytes());
+                    }
+                    os.flush();
+                    os.close();
+                    if (Files.size(debugFile.toPath()) > 250_000) createNewDebugFile(false);
+                    messageQueue.clear();
+                } catch (InterruptedException | IOException ex) {
+                    Thread.currentThread().interrupt();
+                    log.error("Failed to process debug file: " + ex.getMessage());
+                }
+            }
+        });
+        t.setName("DEBUG YT-DATA COLLECTOR");
+        return t;
+    }
+
+    private static void copyStream(InputStream is, OutputStream os) throws IOException {
+        int l;
+        byte[] buffer = new byte[1024*1024];
+        while ((l = is.read(buffer)) != -1) {
+            os.write(buffer, 0, l);
+        }
+        is.close();
+    }
+
+    private static void createNewDebugFile(boolean init) throws IOException {
+        File folder = new File("logs", "debug");
+        if (!init) {
+            File compressed = new File(folder, System.currentTimeMillis()+".ytdebug.gz");
+            try (GZIPOutputStream os = new GZIPOutputStream(new FileOutputStream(compressed))) {
+                for (File file : Objects.requireNonNull(folder.listFiles())) {
+                    if (file.getName().contains(".ytdebug.temp")) {
+                        try (InputStream is = new FileInputStream(file)) {
+                            copyStream(is, os);
+                        }
+                        Files.delete(file.toPath());
+                    }
+
+                    if (file.getName().contains(".ytdebug.gz") && !file.getName().equalsIgnoreCase(compressed.getName()) && Files.size(file.toPath()) < 100_000_000) {
+                        try (GZIPInputStream gis = new GZIPInputStream(new FileInputStream(file))) {
+                            copyStream(gis, os);
+                        }
+                        Files.delete(file.toPath());
+                    }
+                }
+            }
+        }
+
+        if (!folder.exists() && !folder.mkdirs()) log.error("Failed to create log directory");
+        debugFile = new File(folder, System.currentTimeMillis()+".ytdebug.temp");
+        if (!debugFile.createNewFile()) log.error("Failed to create debugFile");
     }
 }
