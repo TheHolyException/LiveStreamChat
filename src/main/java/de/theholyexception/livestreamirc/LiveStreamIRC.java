@@ -5,20 +5,19 @@ import de.theholyexception.livestreamirc.util.*;
 import de.theholyexception.livestreamirc.ircprovider.IRC;
 import de.theholyexception.livestreamirc.ircprovider.TwitchImpl;
 import de.theholyexception.livestreamirc.webchat.WebChatServer;
-import de.theholyexception.livestreamirc.webchat.WebSocketHandler;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.tomlj.Toml;
 import org.tomlj.TomlParseResult;
 
 import java.io.IOException;
+import java.net.MalformedURLException;
+import java.net.URL;
 import java.nio.file.Path;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.*;
 import java.util.concurrent.LinkedBlockingQueue;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 @Slf4j
 public class LiveStreamIRC {
@@ -35,7 +34,7 @@ public class LiveStreamIRC {
     private static final Set<Channel> activeChannels = Collections.synchronizedSet(new HashSet<>());
     @Getter
     private static final Map<String, String> channelStreamerMap = new HashMap<>();
-    private static LinkedBlockingQueue<Runnable> mainThreadQueue = new LinkedBlockingQueue<>();
+    private static final LinkedBlockingQueue<Runnable> mainThreadQueue = new LinkedBlockingQueue<>();
 
     public static void main(String[] args) {
         loadConfig();
@@ -45,15 +44,15 @@ public class LiveStreamIRC {
         ircList.put("Twitch", new TwitchImpl());
         ircList.put("YouTube", new YoutubeImpl());
         new WebChatServer();
-        new WebSocketHandler(cfg.getTable("websocket"));
         awaitAPIs();
         startDBPoll();
-        // MUST BE THE LAST!!
 
         log.info("---------------------------------------");
         log.info("LiveStream IRC");
         log.info("System Ready!");
         log.info("---------------------------------------");
+
+        // MUST BE THE LAST!!
         startMainThreadQueue();
     }
 

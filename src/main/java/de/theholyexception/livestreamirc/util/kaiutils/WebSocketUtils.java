@@ -1,4 +1,4 @@
-package de.theholyexception.livestreamirc.webchat;
+package de.theholyexception.livestreamirc.util.kaiutils;
 
 import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
@@ -10,24 +10,28 @@ import java.util.Base64;
 import java.util.Random;
 
 public class WebSocketUtils {
-
-    private WebSocketUtils() {}
-
     public static String calculateResponseSecret(byte[] challangeKey){
         return calculateResponseSecret(new String(challangeKey));
     }
-    public static String calculateResponseSecret(String key){
+    public static String calculateResponseSecret(String challangeKey){
+        String key = new String(challangeKey) + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
         MessageDigest md = null;
         try {
             md = MessageDigest.getInstance("SHA-1");
         } catch (NoSuchAlgorithmException e) {
             e.printStackTrace();
-            return null;
         }
         return new String(Base64.getEncoder().encode(md.digest(key.getBytes())));
     }
 
     public static void send(DataOutputStream dos, byte[] data, int opCode, boolean maskedMode) throws IOException {
+        // https://developer.mozilla.org/en-US/docs/Web/API/WebSockets_API/Writing_WebSocket_servers
+        // https://developer.mozilla.org/en-US/docs/Web/API/WebSockets_API/Writing_a_WebSocket_server_in_Java
+
+        // masking as Server is not allowed :(
+        // https://datatracker.ietf.org/doc/html/rfc6455#section-5.1
+        // -> "A server MUST NOT mask any frames that it sends to the client."
+
         ByteArrayOutputStream writeBuf = new ByteArrayOutputStream(data.length + 10);//the overhead can't be lager then 10 bytes.
         DataOutputStream d = new DataOutputStream(writeBuf);
 
@@ -54,6 +58,11 @@ public class WebSocketUtils {
         if (maskedMode) {
             int mask = new Random(System.currentTimeMillis()).nextInt();
             d.writeInt(mask);
+			/* this is maybe fast, but on large data sets i can do better.
+			for (int i = 0; i < data.length; i++) {
+				d.write(data[i] ^ (mask >> ((3 - (i & 3)) << 3)) & 0xFF);
+			}
+			*/
             applyMask(d, data, maskToBytes(mask));
             writeBuf.writeTo(dos);
         } else {

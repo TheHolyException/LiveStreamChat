@@ -1,6 +1,8 @@
 package de.theholyexception.livestreamirc.webchat;
 
 import de.theholyexception.livestreamirc.LiveStreamIRC;
+import de.theholyexception.livestreamirc.util.Channel;
+import de.theholyexception.livestreamirc.util.kaiutils.WebSocketServer;
 import lombok.extern.slf4j.Slf4j;
 import org.tomlj.TomlTable;
 
@@ -14,72 +16,73 @@ import java.util.*;
 public class Connection extends Thread {
 
     private final Socket socket;
-    private final BufferedInputStream bis;
-    private final BufferedOutputStream bos;
-
+    private InputStream bis;
+    private OutputStream bos;
     private static Set<WSClient> wsClients = Collections.synchronizedSet(new HashSet<>());
-
 
     public Connection(Socket socket) throws IOException {
         this.socket = socket;
-        this.bis = new BufferedInputStream(socket.getInputStream());
-        this.bos = new BufferedOutputStream(socket.getOutputStream());
         this.start();
     }
 
     @Override
     public void run() {
         try {
+            this.bis = new DataInputStream(socket.getInputStream());
+            this.bos = new DataOutputStream(socket.getOutputStream());
             String[] args = readLine().split(" ");
 
-            if (args[1].equalsIgnoreCase("/ws")) {
+            if (args[1].equalsIgnoreCase("/ws"))
                 handleWebsocket();
-            } else {
+            else
                 handelHTTP(args);
-            }
         } catch (IOException ex) {
             ex.printStackTrace();
         }
     }
 
     private void handleWebsocket() throws IOException {
-//        WebSocketServer server = new WebSocketServer(bis, bos, new WebSocketServer.PacketReceivedEvent() {
-//            @Override
-//            public void onReceived(byte[] data, WebSocketServer webSocket) {
-//                String s = new String(data);
-//                System.out.println(s);
-//                webSocket.send("OK");
-//
-//                Optional<WSClient> optionalWSClient = wsClients.stream().filter(ws -> ws.getWebSocket().equals(webSocket)).findFirst();
-//                optionalWSClient.ifPresent(wsClient -> {
-//                    if (wsClient.getEventID() != null) log.warn("WebSocket subscribed to new streamer");
-//                    long eventID = Long.parseLong(s.split(",")[0]);
-//                    int maxMessages = Integer.parseInt(s.split(",")[1]);
-//                    wsClient.setEventID(eventID);
-//
-//                    Optional<Channel> optionalChannel = LiveStreamIRC.getActiveChannels().stream().filter(channel -> channel.event() == eventID).findFirst();
-//                    if (optionalChannel.isEmpty()) {
-//                        log.error("Failed to get channel for streamer {}", eventID);
-//                        return;
-//                    }
-//
-//                    LiveStreamIRC.getMessageProvider().addSubscriber(wsClient);
-//                    LiveStreamIRC.getMessageProvider().sendCachedMessages(wsClient, maxMessages);
-//                });
-//            }
-//
-//            @Override
-//            public void onClosed(byte[] data, WebSocketServer webSocket) {
-//                Optional<WSClient> optionalWSClient = wsClients.stream().filter(ws -> ws.getWebSocket().equals(webSocket)).findFirst();
-//                optionalWSClient.ifPresent(wsClient -> {
-//                    wsClients.remove(wsClient);
-//                    LiveStreamIRC.getMessageProvider().removeSubscriber(wsClient);
-//                });
-//                System.out.println("Websocket closed");
-//            }
-//        });
-//        System.out.println("WebSocketServer: Connection open.");
-//        wsClients.add(new WSClient(server));
+        new WebSocketServer(bis, bos, new WebSocketServer.PacketReceivedEvent() {
+            @Override
+            public void onOpen(WebSocketServer webSocket) {
+                wsClients.add(new WSClient(webSocket));
+            }
+
+            @Override
+            public void onReceived(byte[] data, WebSocketServer webSocket) {
+                String s = new String(data);
+                if (s.equals("keepAlive")) return;
+                System.out.println("receive: "+ new String(data));
+
+                Optional<WSClient> optionalWSClient = wsClients.stream().filter(ws -> ws.getWebSocket().equals(webSocket)).findFirst();
+                optionalWSClient.ifPresent(wsClient -> {
+                    if (wsClient.getEventID() != null) log.warn("WebSocket subscribed to new streamer");
+                    long eventID = Long.parseLong(s.split(",")[0]);
+                    int maxMessages = Integer.parseInt(s.split(",")[1]);
+                    wsClient.setEventID(eventID);
+
+                    Optional<Channel> optionalChannel = LiveStreamIRC.getActiveChannels().stream().filter(channel -> channel.event() == eventID).findFirst();
+                    if (optionalChannel.isEmpty()) {
+                        log.error("Failed to get channel for streamer {}", eventID);
+                        return;
+                    }
+
+                    LiveStreamIRC.getMessageProvider().addSubscriber(wsClient);
+                    LiveStreamIRC.getMessageProvider().sendCachedMessages(wsClient, maxMessages);
+                });
+            }
+
+            @Override
+            public void onClosed(byte[] data, WebSocketServer webSocket) {
+                System.out.println("Websocket closed");
+                Optional<WSClient> optionalWSClient = wsClients.stream().filter(ws -> ws.getWebSocket().equals(webSocket)).findFirst();
+                optionalWSClient.ifPresent(wsClient -> {
+                    wsClients.remove(wsClient);
+                    LiveStreamIRC.getMessageProvider().removeSubscriber(wsClient);
+                });
+            }
+        });
+        System.out.println("New Websocket");
     }
 
     private void handelHTTP(String[] args) {
@@ -94,18 +97,15 @@ public class Connection extends Thread {
                 else if (args[1].endsWith(".js")) {
                     TomlTable table = LiveStreamIRC.getCfg().getTable("websocket");
                     writeFile("web/"+args[1].substring(1), "text/javascript"
-                            ,"###WEBSOCKETURL###", table.getString("requestURL") + ":" + table.getLong("port")
                     );
                 }
 
                 else if (args[1].endsWith(".png")) {
-                    System.out.println(args[1].substring(1));
-                    writeFile("web/"+args[1].substring(1), "image/png");
+                    writeFileRaw("web/images/"+args[1].substring(1), "image/png");
                 }
 
                 else if (params.length > 1) {
                     writeFile("web/webchat.html", "text/html"
-                            //, "###eventid###", readHTTPParams(params[1]).get("event-id")
                     );
 
                 }
@@ -116,7 +116,7 @@ public class Connection extends Thread {
                 bos.write(("""
                         HTTP/1.1 400 Bad Request
                         Content-Type: text/html
-                        
+
                         The Server was unable to parse or handle your http request.
                         """).getBytes());
             } catch (IOException ex1) {
@@ -187,7 +187,7 @@ public class Connection extends Thread {
                 HTTP/1.1 200 OK
                 Content-Type: %s
                 Content-Length: %s
-                
+
                 """,contentType, l).getBytes());
     }
 
@@ -199,6 +199,14 @@ public class Connection extends Thread {
                 s = s.replace(replacements[i], replacements[i+1]);
             }
             data = s.getBytes();
+            writeHeader(type, data.length, bos);
+            bos.write(data);
+        }
+    }
+
+    private void writeFileRaw(String path, String type) throws IOException {
+        try (BufferedInputStream lBis = new BufferedInputStream(new FileInputStream(path))) {
+            byte[] data = lBis.readAllBytes();
             writeHeader(type, data.length, bos);
             bos.write(data);
         }

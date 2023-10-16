@@ -3,18 +3,13 @@ package de.theholyexception.livestreamirc.ircprovider;
 import de.theholyexception.livestreamirc.LiveStreamIRC;
 import de.theholyexception.livestreamirc.util.Channel;
 import de.theholyexception.livestreamirc.util.Message;
+import de.theholyexception.livestreamirc.webchat.WebSocket;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import org.java_websocket.client.WebSocketClient;
-import org.java_websocket.handshake.ServerHandshake;
 import org.tomlj.TomlTable;
 
-import java.net.URI;
-import java.net.URISyntaxException;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Objects;
+import java.io.IOException;
+import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -24,7 +19,7 @@ public class TwitchImpl implements IRC {
     private final Pattern usernamePattern = Pattern.compile(":(\\w+)!");
     private final Pattern channelPattern = Pattern.compile("PRIVMSG #(\\w+) :(.*)");
     private final Pattern isMessagePattern = Pattern.compile("PRIVMSG #");
-    private WebSocketClient client;
+    private WebSocket client;
     @Getter
     private boolean connected = false;
 
@@ -34,83 +29,78 @@ public class TwitchImpl implements IRC {
 
     public TwitchImpl() {
         twitchConfig = LiveStreamIRC.getCfg().getTable("twitch");
-        URI twitchAPI;
+        String twitchAPI = Objects.requireNonNull(twitchConfig.getString("api"));
+
         try {
-            twitchAPI = new URI(Objects.requireNonNull(twitchConfig.getString("api")));
-        } catch (URISyntaxException ex) {
-            if (log.isDebugEnabled()) ex.printStackTrace();
-            log.error("Failed to load twitch API " + ex.getMessage());
-            return;
-        }
-
-        client = new WebSocketClient(twitchAPI) {
-            @Override
-            public void onOpen(ServerHandshake serverHandshake) {
-                log.info("Connected to TwitchIRC");
-                client.send("PASS " + twitchConfig.getString("token"));
-                client.send("NICK rbu_irc");
-                connected = true;
-            }
-
-            @Override
-            public void onMessage(String s) {
-                if (s.startsWith("PING")) {
-                    client.send(s.replace("PING", "PONG"));
-                    return;
+            client = WebSocket.open(twitchAPI, new WebSocket.WebSocketPacket() {
+                @Override
+                public void onBinaryPacketReceived(byte[] data) {
                 }
 
-                if (isMessagePattern.matcher(s).find()) {
-                    Matcher username = usernamePattern.matcher(s);
-                    Matcher other = channelPattern.matcher(s);
-
-                    if (!username.find() || !other.find()) {
-                        log.error("Failed to parse messagestring!!!");
-                        log.debug("Matchers: username:{} other:{}", username.find(), other.find());
-                        log.debug("Message: {}", s.trim());
+                @Override
+                public void onTextPacketReceived(String s) {
+                    if (s.startsWith("PING")) {
+                        client.sendPacket(s.replace("PING", "PONG"));
                         return;
                     }
 
-                    Channel channel = channelMap.get(other.group(1));
+                    if (isMessagePattern.matcher(s).find()) {
+                        Matcher username = usernamePattern.matcher(s);
+                        Matcher other = channelPattern.matcher(s);
 
-                    Message message = new Message(channel, username.group(1), other.group(2), System.currentTimeMillis());
-                    LiveStreamIRC.getMessageProvider().addMessage(message);
+                        if (!username.find() || !other.find()) {
+                            log.error("Failed to parse messagestring!!!");
+                            log.debug("Matchers: username:{} other:{}", username.find(), other.find());
+                            log.debug("Message: {}", s.trim());
+                            return;
+                        }
+
+                        Channel channel = channelMap.get(other.group(1));
+
+                        Message message = new Message(channel, username.group(1), other.group(2), System.currentTimeMillis());
+                        LiveStreamIRC.getMessageProvider().addMessage(message);
+                    }
                 }
-            }
 
-            @Override
-            public void onClose(int i, String s, boolean b) {
-                log.warn("Connection to TwitchIRC Lost");
-                connected = false;
-                LiveStreamIRC.executeInMainThread(this::reconnect);
-            }
+                @Override
+                public void notifyConnectionClose() {
+                    log.warn("Connection to TwitchIRC Lost");
+                    connected = false;
+                    LiveStreamIRC.executeInMainThread(() -> reconnect());
+                }
 
-            @Override
-            public void onError(Exception e) {
-                if (log.isDebugEnabled()) e.printStackTrace();
-                log.error("TwitchIRC Error: " + e.getMessage());
-            }
-        };
-
+                @Override
+                public void notifyConnectionFailure(String message) {
+                    log.error("TwitchIRC Error: " + message);
+                }
+            });
+            log.info("Connected to TwitchIRC");
+            client.sendPacket("PASS " + twitchConfig.getString("token"));
+            client.sendPacket("NICK rbu_irc");
+            connected = true;
+        } catch (IOException e) {
+            connected = false;
+            throw new RuntimeException(e);
+        }
         reconnect();
 
     }
 
     @Override
     public void joinChannel(Channel channel) {
-        client.send("JOIN #"+channel.streamURL());
+        client.sendPacket("JOIN #"+channel.streamURL());
         channelMap.put(channel.streamURL(), channel);
     }
 
     @Override
     public void leaveChannel(Channel channel) {
         channelMap.remove(channel.streamURL());
-        client.send("PART #"+channel.streamURL());
+        client.sendPacket("PART #"+channel.streamURL());
     }
 
     private void reconnect() {
         while (!connected) {
             try {
-                if (!client.connectBlocking()) client.connect();
                 log.info("Connecting ...");
                 Thread.sleep(500);
             } catch (InterruptedException ex) {

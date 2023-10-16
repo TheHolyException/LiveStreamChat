@@ -7,10 +7,7 @@ import org.tomlj.TomlTable;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.ServerSocket;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.Optional;
-import java.util.Set;
+import java.util.*;
 
 @Slf4j
 public class WebChatServer extends Thread {
@@ -23,7 +20,7 @@ public class WebChatServer extends Thread {
         int port = Math.toIntExact(Optional.ofNullable(ircData.getLong("port")).orElse(80L));
         log.info("Starting WebChat server on {} Port: {}", host, port);
         try {
-            serverSocket = new ServerSocket(port, 50, InetAddress.getByName(host));
+            serverSocket = new ServerSocket(port);//, 50, InetAddress.getByName(host));
         } catch (IOException ex) {
             ex.printStackTrace();
         }
@@ -34,7 +31,7 @@ public class WebChatServer extends Thread {
     public void run() {
         while (!isInterrupted()) {
             try {
-                connections.add(new Connection(serverSocket.accept()));
+                new Connection(serverSocket.accept());
             } catch (IOException ex) {
                 ex.printStackTrace();
             }

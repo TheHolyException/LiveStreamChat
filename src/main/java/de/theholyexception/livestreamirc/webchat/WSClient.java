@@ -1,16 +1,16 @@
 package de.theholyexception.livestreamirc.webchat;
 
+import de.theholyexception.livestreamirc.util.kaiutils.WebSocketServer;
 import lombok.Getter;
 import lombok.Setter;
-import org.java_websocket.WebSocket;
 
 public class WSClient {
     @Getter
-    private WebSocket webSocket;
+    private WebSocketServer webSocket;
     @Getter @Setter
     private Long eventID;
 
-    WSClient(WebSocket socket) {
+    WSClient(WebSocketServer socket) {
         this.webSocket = socket;
     }
 }
